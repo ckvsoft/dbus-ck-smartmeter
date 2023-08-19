@@ -22,8 +22,8 @@ sys.path.insert(1, os.path.join(os.path.dirname(__file__), '/opt/victronenergy/d
 from vedbus import VeDbusService
 
 
-class DbusShelly3emService:
-  def __init__(self, paths, productname='Shelly 3EM', connection='Shelly 3EM HTTP JSON service'):
+class DbusService:
+  def __init__(self, paths, productname='CK 3SM', connection='Ckvsoft SmartMeter HTTP JSON service'):
     config = self._getConfig()
     deviceinstance = int(config['DEFAULT']['DeviceInstance'])
     customname = config['DEFAULT']['CustomName']
@@ -58,12 +58,12 @@ class DbusShelly3emService:
     self._dbusservice.add_path('/ProductName', productname)
     self._dbusservice.add_path('/CustomName', customname)
     self._dbusservice.add_path('/Latency', None)
-    self._dbusservice.add_path('/FirmwareVersion', 0.3)
+    self._dbusservice.add_path('/FirmwareVersion', 0.1)
     self._dbusservice.add_path('/HardwareVersion', 0)
     self._dbusservice.add_path('/Connected', 1)
     self._dbusservice.add_path('/Role', role)
-    self._dbusservice.add_path('/Position', self._getShellyPosition()) # normaly only needed for pvinverter
-    self._dbusservice.add_path('/Serial', self._getShellySerial())
+    self._dbusservice.add_path('/Position', self._getPosition()) # normaly only needed for pvinverter
+    self._dbusservice.add_path('/Serial', self._getSerial())
     self._dbusservice.add_path('/UpdateIndex', 0)
  
     # add path values to dbus
@@ -80,8 +80,8 @@ class DbusShelly3emService:
     # add _signOfLife 'timer' to get feedback in log every 5minutes
     gobject.timeout_add(self._getSignOfLifeInterval()*60*1000, self._signOfLife)
  
-  def _getShellySerial(self):
-    meter_data = self._getShellyData()  
+  def _getSerial(self):
+    meter_data = self._getData()  
     
     if not meter_data['mac']:
         raise ValueError("Response does not contain 'mac' attribute")
@@ -106,7 +106,7 @@ class DbusShelly3emService:
     return int(value)
  
  
-  def _getShellyPosition(self):
+  def _getPosition(self):
     config = self._getConfig()
     value = config['DEFAULT']['Position']
     
@@ -116,26 +116,25 @@ class DbusShelly3emService:
     return int(value)
  
  
-  def _getShellyStatusUrl(self):
+  def _getStatusUrl(self):
     config = self._getConfig()
     accessType = config['DEFAULT']['AccessType']
     
     if accessType == 'OnPremise': 
-        URL = "http://%s:%s@%s/status" % (config['ONPREMISE']['Username'], config['ONPREMISE']['Password'], config['ONPREMISE']['Host'])
-        URL = URL.replace(":@", "")
+        URL = "http://%s/status.php" % (config['ONPREMISE']['Host'])
     else:
         raise ValueError("AccessType %s is not supported" % (config['DEFAULT']['AccessType']))
     
     return URL
     
  
-  def _getShellyData(self):
-    URL = self._getShellyStatusUrl()
+  def _getData(self):
+    URL = self._getStatusUrl()
     meter_r = requests.get(url = URL, timeout=5)
     
     # check for response
     if not meter_r:
-        raise ConnectionError("No response from Shelly 3EM - %s" % (URL))
+        raise ConnectionError("No response from CK SmartMeter - %s" % (URL))
     
     meter_data = meter_r.json()     
     
@@ -156,37 +155,27 @@ class DbusShelly3emService:
  
   def _update(self):   
     try:
-      #get data from Shelly 3em
-      meter_data = self._getShellyData()
+      #get data from SmartMeter
+      meter_data = self._getData()
       config = self._getConfig()
-
-      try:
-        remapL1 = int(config['ONPREMISE']['L1Position'])
-      except KeyError:
-        remapL1 = 1
-
-      if remapL1 > 1:
-        old_l1 = meter_data['emeters'][0]
-        meter_data['emeters'][0] = meter_data['emeters'][remapL1-1]
-        meter_data['emeters'][remapL1-1] = old_l1
        
       #send data to DBus
-      self._dbusservice['/Ac/Power'] = meter_data['total_power']
-      self._dbusservice['/Ac/L1/Voltage'] = meter_data['emeters'][0]['voltage']
-      self._dbusservice['/Ac/L2/Voltage'] = meter_data['emeters'][1]['voltage']
-      self._dbusservice['/Ac/L3/Voltage'] = meter_data['emeters'][2]['voltage']
-      self._dbusservice['/Ac/L1/Current'] = meter_data['emeters'][0]['current']
-      self._dbusservice['/Ac/L2/Current'] = meter_data['emeters'][1]['current']
-      self._dbusservice['/Ac/L3/Current'] = meter_data['emeters'][2]['current']
-      self._dbusservice['/Ac/L1/Power'] = meter_data['emeters'][0]['power']
-      self._dbusservice['/Ac/L2/Power'] = meter_data['emeters'][1]['power']
-      self._dbusservice['/Ac/L3/Power'] = meter_data['emeters'][2]['power']
-      self._dbusservice['/Ac/L1/Energy/Forward'] = (meter_data['emeters'][0]['total']/1000)
-      self._dbusservice['/Ac/L2/Energy/Forward'] = (meter_data['emeters'][1]['total']/1000)
-      self._dbusservice['/Ac/L3/Energy/Forward'] = (meter_data['emeters'][2]['total']/1000)
-      self._dbusservice['/Ac/L1/Energy/Reverse'] = (meter_data['emeters'][0]['total_returned']/1000) 
-      self._dbusservice['/Ac/L2/Energy/Reverse'] = (meter_data['emeters'][1]['total_returned']/1000) 
-      self._dbusservice['/Ac/L3/Energy/Reverse'] = (meter_data['emeters'][2]['total_returned']/1000) 
+      self._dbusservice['/Ac/Power'] = meter_data['Power']
+      self._dbusservice['/Ac/L1/Voltage'] = meter_data['Lines']['L1']['AC_Voltage']
+      self._dbusservice['/Ac/L2/Voltage'] = meter_data['Lines']['L2']['AC_Voltage']
+      self._dbusservice['/Ac/L3/Voltage'] = meter_data['Lines']['L3']['AC_Voltage']
+      self._dbusservice['/Ac/L1/Current'] = meter_data['Lines']['L1']['AC_Current']
+      self._dbusservice['/Ac/L2/Current'] = meter_data['Lines']['L2']['AC_Current']
+      self._dbusservice['/Ac/L3/Current'] = meter_data['Lines']['L2']['AC_Current']
+      self._dbusservice['/Ac/L1/Power'] = meter_data['Lines']['L1']['Power']
+      self._dbusservice['/Ac/L2/Power'] = meter_data['Lines']['L2']['Power']
+      self._dbusservice['/Ac/L3/Power'] = meter_data['Lines']['L3']['Power']
+      self._dbusservice['/Ac/L1/Energy/Forward'] = (meter_data['Lines']['L1']['Energy']/1000)
+      self._dbusservice['/Ac/L2/Energy/Forward'] = (meter_data['Lines']['L2']['Energy']/1000)
+      self._dbusservice['/Ac/L3/Energy/Forward'] = (meter_data['Lines']['L3']['Energy']/1000)
+#      self._dbusservice['/Ac/L1/Energy/Reverse'] = (meter_data['Lines']['L1']['total_returned']/1000) 
+#      self._dbusservice['/Ac/L2/Energy/Reverse'] = (meter_data['Lines']['L2']['total_returned']/1000) 
+#      self._dbusservice['/Ac/L3/Energy/Reverse'] = (meter_data['Lines']['L3']['total_returned']/1000) 
       
       # Old version
       #self._dbusservice['/Ac/Energy/Forward'] = self._dbusservice['/Ac/L1/Energy/Forward'] + self._dbusservice['/Ac/L2/Energy/Forward'] + self._dbusservice['/Ac/L3/Energy/Forward']
@@ -268,7 +257,7 @@ def main():
       _v = lambda p, v: (str(round(v, 1)) + ' V')   
      
       #start our main-service
-      pvac_output = DbusShelly3emService(
+      pvac_output = DbusService(
         paths={
           '/Ac/Energy/Forward': {'initial': 0, 'textformat': _kwh}, # energy bought from the grid
           '/Ac/Energy/Reverse': {'initial': 0, 'textformat': _kwh}, # energy sold to the grid
