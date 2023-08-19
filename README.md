@@ -1,8 +1,8 @@
-# dbus-shelly-3em-smartmeter
-Integrate Shelly 3EM smart meter into [Victron Energies Venus OS](https://github.com/victronenergy/venus)
+# dbus-ck-smartmeter
+Integrate ckvsoft smart meter into [Victron Energies Venus OS](https://github.com/victronenergy/venus)
 
 ## Purpose
-With the scripts in this repo it should be easy possible to install, uninstall, restart a service that connects the Shelly 3EM to the VenusOS and GX devices from Victron.
+With the scripts in this repo it should be easy possible to install, uninstall, restart a service that connects the ckvsoft smartmeter to the VenusOS and GX devices from Victron.
 Idea is pasend on @RalfZim project linked below.
 
 
@@ -16,12 +16,12 @@ This project is my first on GitHub and with the Victron Venus OS, so I took some
 
 ## How it works
 ### My setup
-- Shelly 3EM with latest firmware (20220209-094824/v1.11.8-g8c7bb8d)
-  - 3-Phase installation (normal for Germany)
+- CkvSoft SmartMeter
+  - 3-Phase installation
   - Connected to Wifi network "A"
   - IP 192.168.2.13/24  
-- Victron Energy Cerbo GX with Venus OS - Firmware v2.93
-  - No other devices from Victron connected (still waiting for shipment of Multiplus-2)
+- Victron Energy Multiplus 2 and Raspberry with Venus OS
+  - 16Kwh LifePo4, Fronius PV
   - Connected to Wifi network "A"
   - IP 192.168.2.20/24
 
@@ -30,11 +30,11 @@ As mentioned above the script is inspired by @RalfZim fronius smartmeter impleme
 So what is the script doing:
 - Running as a service
 - connecting to DBus of the Venus OS `com.victronenergy.grid.http_40` or `com.victronenergy.pvinverter.http_40`
-- After successful DBus connection Shelly 3EM is accessed via REST-API - simply the /status is called and a JSON is returned with all details
-  A sample JSON file from Shelly 3EM can be found [here](docs/shelly3em-status-sample.json)
-- Serial/MAC is taken from the response as device serial
+- After successful DBus connection Ckvsoft SmartMeter is accessed via REST-API - simply the /JsonData is called and a JSON is returned with all details
+  A sample JSON file can be found [here](docs/shelly3em-status-sample.json)
+- MAC is taken from the response as device serial
 - Paths are added to the DBus with default value 0 - including some settings like name, etc
-- After that a "loop" is started which pulls Shelly 3EM data every 750ms from the REST-API and updates the values in the DBus
+- After that a "loop" is started which pulls SmartMeter data every 750ms from the REST-API and updates the values in the DBus
 
 Thats it 😄
 
@@ -49,22 +49,22 @@ Thats it 😄
 
 ## Install & Configuration
 ### Get the code
-Just grap a copy of the main branche and copy them to `/data/dbus-shelly-3em-smartmeter`.
+Just grap a copy of the main branche and copy them to `/data/dbus-smartmeter`.
 After that call the install.sh script.
 
 The following script should do everything for you:
 ```
-wget https://github.com/fabian-lauer/dbus-shelly-3em-smartmeter/archive/refs/heads/main.zip
-unzip main.zip "dbus-shelly-3em-smartmeter-main/*" -d /data
-mv /data/dbus-shelly-3em-smartmeter-main /data/dbus-shelly-3em-smartmeter
-chmod a+x /data/dbus-shelly-3em-smartmeter/install.sh
-/data/dbus-shelly-3em-smartmeter/install.sh
+wget https://github.com/ckvsoft/dbus-ck-smartmeter/archive/refs/heads/main.zip
+unzip main.zip "dbus-smartmeter-main/*" -d /data
+mv /data/dbus-smartmeter-main /data/dbus-smartmeter
+chmod a+x /data/dbus-smartmeter/install.sh
+/data/dbus-smartmeter/install.sh
 rm main.zip
 ```
 ⚠️ Check configuration after that - because service is already installed an running and with wrong connection data (host, username, pwd) you will spam the log-file
 
 ### Change config.ini
-Within the project there is a file `/data/dbus-shelly-3em-smartmeter/config.ini` - just change the values - most important is the host, username and password in section "ONPREMISE". More details below:
+Within the project there is a file `/data/dbus-smartmeter/config.ini` - just change the values - most important is the host in section "ONPREMISE". More details below:
 
 | Section  | Config vlaue | Explanation |
 | ------------- | ------------- | ------------- |
@@ -72,19 +72,10 @@ Within the project there is a file `/data/dbus-shelly-3em-smartmeter/config.ini`
 | DEFAULT  | SignOfLifeLog  | Time in minutes how often a status is added to the log-file `current.log` with log-level INFO |
 | DEFAULT  | CustomName  | Name of your device - usefull if you want to run multiple versions of the script |
 | DEFAULT  | DeviceInstance  | DeviceInstanceNumber e.g. 40 |
-| DEFAULT  | Role | use 'GRID' or 'PVINVERTER' to set the type of the shelly 3EM |
+| DEFAULT  | Role | use 'GRID' or 'PVINVERTER' to set the type of the SmartMeter |
 | DEFAULT  | Position | Available Postions: 0 = AC, 1 = AC-Out 1, AC-Out 2 |
 | DEFAULT  | LogLevel  | Define the level of logging - lookup: https://docs.python.org/3/library/logging.html#levels |
-| ONPREMISE  | Host | IP or hostname of on-premise Shelly 3EM web-interface |
-| ONPREMISE  | Username | Username for htaccess login - leave blank if no username/password required |
-| ONPREMISE  | Password | Password for htaccess login - leave blank if no username/password required |
-| ONPREMISE  | L1Position | Which input on the Shelly in 3-phase grid is supplying a single Multi |
-
-
-### Remapping L1
-In a 3-phase grid with a single Multi, Venus OS expects L1 to be supplying the only Multi. This is not always the case. If for example your Multi is supplied by L3 (Input `C` on the Shelly) your GX device will show AC Loads as consuming from both L1 and L3. Setting `L1Position` to the appropriate Shelly input allows for remapping the phases and showing correct data on the GX device.
-
-If your single Multi is connected to the Input `A` on the Shelly you don't need to change this setting. Setting `L1Position` to `2` would swap the `B` CT & Voltage sensors data on the Shelly with the `A` CT & Voltage sensors data on the Shelly. Respectively, setting `L1Position` to `3` would swap `A` and `C` inputs.
+| ONPREMISE  | Host | IP or hostname of on-premise Ckvsoft SmartMeter web-interface |
 
 ## Used documentation
 - https://github.com/victronenergy/venus/wiki/dbus#grid   DBus paths for Victron namespace GRID
